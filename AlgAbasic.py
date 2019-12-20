@@ -210,51 +210,26 @@ codes_and_names = {'BF' : 'brute-force search',
 ############    now the code for your algorithm should begin                               ############
 #######################################################################################################
 print(distance_matrix)
-class Node:
-    def __init__(self, data, prev=None, after=None):
-        self.data = data
-        self.prev = prev
-        self.after = after
         
 class PriorityQueue:
     def __init__(self):
-        self.front = None
-        self.rear = None
+        self.queue = []
         
     def isEmpty(self):
-        return self.front == None
+        return self.queue == []
     
     def enqueue(self, data):
-        if self.rear == None:
-            self.front = Node(data)
-            self.rear = self.front
-        else:
-            self.rear.after = Node(data, self.rear)
-            self.rear = self.rear.after
+        self.queue.append(data)
     
     def dequeue(self):
-        pointer = self.front
-        data = self.front.data
-        minimum = data[-1]
-        while pointer.after != None:
-            pointer = pointer.after
-            if pointer.data[-1] < minimum:
-                data = pointer.data
-                minimum = data[-1]
-        prev_node = pointer.prev
-        next_node = pointer.after
-        if prev_node != None:
-            prev_node.after = next_node
-        if next_node != None:
-            next_node.rear = prev_node
-        pointer.data = None
+        index = 0
+        minimum = self.queue[0][-1]
+        for i in range(len(self.queue)):
+            if self.queue[i][-1] < minimum:
+                index = i
+                minimum = self.queue[i][-1]
+        data = self.queue.pop(index)
         return data
-        
-        data_out = self.front.data
-        self.front = self.front.after
-        if self.front == None:
-            self.rear = None
-        return data_out
 
 def register_node(new_id, state, parent_id, action, path_cost, depth, f_value):
     return (new_id, state, parent_id, action, path_cost, depth, f_value)
@@ -262,18 +237,15 @@ def register_node(new_id, state, parent_id, action, path_cost, depth, f_value):
 def step_cost(state):
     transition = state[-1]
     if len(state) == num_cities:
-        cost = distance_matrix[state[-2] - 1][transition - 1] + distance_matrix[transition - 1][state[0]]
+        cost = distance_matrix[state[-2]][transition] + distance_matrix[transition][state[0]]
 
     else:
-        cost = distance_matrix[state[-2] - 1][transition - 1]
+        cost = distance_matrix[state[-2]][transition]
     return cost
-
-def g(z):
-	return z[-2][-1]
 
 
 def h(z):
-    if len(z) == num_cities + 1:
+    if len(z) == num_cities:
         return 0
     else:
         lst = []
@@ -282,40 +254,36 @@ def h(z):
                 x = z[-1]
                 lst.append(distance_matrix[x][i])
         return min(lst)
-                
-def f(z):
-	return g(z) + h(z)
 
 def alg1():
     new_id = 1
     S, P, PC, D  = [0], None, 0, 0
     A = [i for i in range(1, num_cities)]
-    print(A)
     F = 1000
     root = register_node(new_id, S, P, A, PC, D, F)
-    F = Queue()
+    F = PriorityQueue()
     F.enqueue(root)
     while F.isEmpty() == False:
         (current_id, state, parent_id, action, path_cost, depth, f) = F.dequeue()
-        print('State: ', state)
         for a in action:
             new_id = new_id + 1
             new_S = state + [a]
-            print('a: ', a, 'state: ', new_S)
             cost = step_cost(new_S)
             new_P = current_id
             new_A = [j for j in action if j != a]
-            new_PC = PC + cost
-            new_D = D + 1
+            new_PC = path_cost + cost
+            new_D = depth + 1
             new_h = h(new_S)
             new_f = new_h + new_PC
             new_node = register_node(new_id, new_S, new_P, new_A, new_PC, new_D, new_f)
-            print(new_node)
             if new_h == 0:
-                return new_node[1], g
+                for i in F.queue:
+                    if i[-1] < new_f:
+                        F.enqueue(new_node)
+                        break
+                return new_S + [0], new_PC
             else:
                 F.enqueue(new_node)
-                print(new_node)
 tour, tour_length = alg1()
 print(tour_length)
 print(tour)
