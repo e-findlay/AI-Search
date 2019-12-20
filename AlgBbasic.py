@@ -184,7 +184,7 @@ my_last_name = "Findlay"
 ############    SA = simulated annealing search                                            ############
 ############    GA = genetic algorithm                                                     ############
 
-alg_code = "BG"
+alg_code = "GA"
 
 ############ you can also add a note that will be added to the end of the output file if   ############
 ############ you like, e.g., "in my basic greedy search, I broke ties by always visiting   ############
@@ -218,6 +218,12 @@ def mutate(Z):
     return Z
 
 def f(X):
+    '''
+    args:
+        X: a tour found by the genetic algorithm
+    return value:
+        cost: the cost of the input tour
+    '''
     cost = 0
     for i in range(len(X) - 1):
         cost += distance_matrix[X[i] - 1][X[i+1] - 1]
@@ -225,21 +231,38 @@ def f(X):
     return cost
 
 def choose(P):
-    total = 0
-    selection = []
+    '''
+    args:
+        P: a population of tours to select from
+    return value:
+        P[k] the kth tour of P that has been selected
+    '''
+    choices = {}
+    index = 0
+    selected = 0
     for i in P:
-        prob = 1 / f(i)
-        total += prob
-        selection.append(total)
-    for j in range(len(selection)):
-        selection[j] = (selection[j])*360 / total
-    chosen = random.randint(0, 359)
-    for i in range(len(selection)):
-        if selection[i] > chosen:
-            return P[i]
+        choices[index] = f(i)
+        index += 1
+    maximum = sum(choices.values())
+    choice = random.uniform(0, maximum)
+    for k, v in choices.items():
+        selected += v
+        if selected > choice:
+            return P[k]
     
         
 def alg1(size, iterations, probability):
+    '''
+    args:
+        size: the size of the population generated
+        iterations: the number of iterations the algorithm runs for
+        probability: an integer defining the probability of a mutation occurring where
+        probability = 1 / this integer
+
+    return values:
+        tour: the tour of all cities with the minimum cost found
+        minimum: the total cost of the best tour found
+    '''
     probList = [False for i in range(probability)]
     probList[random.randint(0, probability - 1)] = True
     P = []
@@ -271,10 +294,11 @@ def alg1(size, iterations, probability):
         costs.append(f(p))
     minimum = min(costs)
     print(minimum)
-    return P[costs.index(minimum)], minimum
+    tour = P[costs.index(minimum)]
+    return tour, minimum
         
 
-tour, tour_length = alg1(100, 100, 10)
+tour, tour_length = alg1(30, 100, 5)
 tour = [i-1 for i in tour]
 
 #######################################################################################################
