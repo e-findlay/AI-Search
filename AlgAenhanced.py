@@ -2,7 +2,7 @@ import os
 import sys
 import time
 import random
-import math
+import heapq
 
 def read_file_into_string(input_file, from_ord, to_ord):
     # take a file "input_file", read it character by character, strip away all unwanted
@@ -112,7 +112,7 @@ def make_distance_matrix_symmetric(num_cities):
 ############ supplied internally as the default file or via a command line execution.      ############
 ############ if your input file does not exist then the program will crash.                ############
 
-input_file = "AISearchfile535.txt"
+input_file = "AISearchfile048.txt"
 
 #######################################################################################################
 
@@ -185,7 +185,7 @@ my_last_name = "Findlay"
 ############    SA = simulated annealing search                                            ############
 ############    GA = genetic algorithm                                                     ############
 
-alg_code = "GA"
+alg_code = "AS"
 
 ############ you can also add a note that will be added to the end of the output file if   ############
 ############ you like, e.g., "in my basic greedy search, I broke ties by always visiting   ############
@@ -210,127 +210,189 @@ codes_and_names = {'BF' : 'brute-force search',
 #######################################################################################################
 ############    now the code for your algorithm should begin                               ############
 #######################################################################################################
-
-def mutate(Z):
-    # return tour with position of 2 cities swapped
-    i = len(Z)
-    idx_1 = random.randint(0, i-1)
-    idx_2 = random.randint(0, i-1)
-    Z[idx_1], Z[idx_2] = Z[idx_2], Z[idx_1]
-    return Z
+        
 
 
-def f(X):
-    if X == [0]:
-        return float("inf")
-    '''
-    args:
-        X: a tour found by the genetic algorithm
-    return value:
-        cost: the cost of the input tour
-    '''
+
+def cost(X):
+    # returns length of tour X
     cost = 0
     for i in range(len(X) - 1):
         cost += distance_matrix[X[i]][X[i+1]]
     cost += distance_matrix[X[-1]][X[0]]
     return cost
 
+def twoOpt(X):
+    # performs a 2-opt operation on tour and returns new  tour and cost
+    tour = X
+    for i in range(1, num_cities - 2):
+        for j in range(i+1, num_cities):
+            permuted_tour = X[:]
+            permuted_tour[i:j] = X[j-1:i-1:-1]
+            if cost(permuted_tour) < cost(tour):
+                tour = permuted_tour
+    return tour, cost(tour)
 
 
+def step_cost(state):
+    transition = state[-1]
+    if len(state) == num_cities:
+        cost = distance_matrix[state[-2]][transition] + distance_matrix[transition][state[0]]
+
+    else:
+        cost = distance_matrix[state[-2]][transition]
+    return cost
+
+def MST(z):
+    # Calculates the MST of set of vertices z using edges from distance_matrix and
+    #returns the total cost of the MST
+    vertices = {}
+    tour = []
+    edges = []
+    cost = 0
+    for i in z:
+        vertices[i] = {}
+        for j in z:
+            if i != j:
+                vertices[i][j] = distance_matrix[i][j]
+                edges.append((i,j, distance_matrix[i][j]))
+    edges.sort(key = lambda x: x[2])
+    for edge in edges:
+        (v1, v2, w) = edge
+        if v1 in tour and v2 in tour:
+            continue
+        cost += w
+        if v1 not in tour:
+            tour.append(v1)
+        if v2 not in tour:
+            tour.append(v2)
+    return cost
 
 
-def order1Crossover(X,Y):
-    '''
-    args: X, Y 2 selected individuals from the population
-    return value: child from crossover of X and Y
-    '''
-    child = [-1]*num_cities
-    indices = sorted(random.sample([i for i in range(num_cities)],2))
-    child[indices[0]:indices[1]] = X[indices[0]:indices[1]]
-    for i in range(indices[0]):
-        for city in Y:
-            if city not in child:
-                child[i] = city
-                break
-    for i in range(indices[1],num_cities):
-        for city in Y:
-            if city not in child:
-                child[i] = city
-                break
-    return child
-    
-    
-def choose(P):
-    '''
-    args:
-        P: a population of tours to select from
-    return value:
-        P[k] the kth tour of P that has been selected
-    '''
-    choices = {}
-    index = 0
-    selected = 0
-    for i in P:
-        choices[index] = 1/f(i)
-        index += 1
-    maximum = sum(choices.values())
-    choice = random.uniform(0, maximum)
-    for k, v in choices.items():
-        selected += v
-        if selected > choice:
-            return P[k]
-    
-        
-def alg1(size=15, iterations=10, probability=0.1):
-    '''
-    args:
-        size: the size of the population generated
-        iterations: the number of iterations the algorithm runs for
-        probability: an integer defining the probability of a mutation occurring where
-        probability = chance of mutation
+def h(z):
+    # return zero if goal node
+    if len(z) == num_cities:
+        return 0
+    else:
+        # calculate MST of remaining cities
+        unvisited = [i for i in range(num_cities) if i not in z]
+        cost = MST(unvisited)
+        # calculate minimum distance from most recently added city to node in MST
+        minimum = float("inf")
+        for i in range(1, num_cities):
+            if distance_matrix[z[-1]][i] < minimum and i not in z:
+                minimum = distance_matrix[z[-1]][i]
+        # calculate minimum distance from node in MST back to start node
+        last = [distance_matrix[0][i] for i in range(num_cities) if i in unvisited]
+        min2 = min(last)
+        # return sum of distance
+        return 4*(cost + minimum + min2)
 
-    return values:
-        tour: the tour of all cities with the minimum cost found
-        minimum: the total cost of the best tour found
-    '''
-    P = []
-    # generate population randomly
-    for i in range(0, size):
-        cities = [i for i in range(num_cities)]
-        population = []
-        while len(population) < num_cities:
-            idx = random.randint(0, len(cities)-1)
-            population.append(cities[idx])
-            cities.pop(idx)
-        P.append(population)
-    for i in range(iterations):
-        newP = []
-        for i in range(0, len(P)):
-            # select two members of popultaion
-            X = choose(P)
-            Y = choose(P)
-            # perform crossover
-            Z = order1Crossover(X,Y)
-            choice = random.uniform(0,1)
-            # perform mutation with probability 0.1
-            if choice <= probability:
-                Z = mutate(Z)
-            # add individual to a new population
-            newP.append(Z)
-        P = newP
-    costs = []
-    # select minimum tour cost from resulting population
-    for p in P:
-        costs.append(f(p))
-    minimum = min(costs)
-    tour = P[costs.index(minimum)]
-    return tour, minimum
+
+def h1(z,k):
+    # if goal node return 0
+    if len(z) == num_cities:
+        return 0
+    else:
+        # return cost of tour using greedy heuristic then applying 2-opt to resulting tour
+        cost = 0
+        a = z[-1]
+        temp = z[:]
+        for i in range(k):
+            lst = []
+            for i in range(num_cities):
+                if i not in temp:
+                    lst.append(distance_matrix[a][i])
+                    c1 = min(lst)
+                    cost += c1
+                    temp += [a]
+                    a = distance_matrix[a].index(c1)
+        cost += distance_matrix[temp[-1]][0]
+        tour, cost = twoOpt(temp)
+        return cost
 
 
             
     
+    
+
+def alg1():
+    start = time.time()
+    new_id = 1
+    # assign initial state, path cost, actions and f-value
+    S, PC  = [0], 0
+    A = [i for i in range(1,num_cities)]
+    fValue = 1000
+    root = (fValue, new_id, S, A, PC)
+    F = []
+    # add root to queue
+    heapq.heappush(F,root)
+    tour = []
+    end = False
+    while F != []:
+        # terminate A* early if time limit reached
+        if end:
+            break
+        # get node from fringe with lowest f-value
+        (f, current_id, state, action, path_cost) = heapq.heappop(F)
+        # if node is a goal node, return the tour
+        if path_cost == f:
+            # perform 2-opts on tour
+            for i in range(19):
+                state, _ = twoOpt(state)
+            state, cost = twoOpt(state)
+            return state, cost
+        for a in action:
+            # exit for loop if time limit reached
+            if (time.time() - start) > 105:
+                end = True
+                break
+            new_id = new_id + 1
+            new_S = state + [a]
+            # calculate step cost
+            if len(new_S) == num_cities:
+                cost = distance_matrix[new_S[-2]][a] + distance_matrix[a][new_S[0]]
+            else:
+                cost = distance_matrix[new_S[-2]][a]
+            # calculate heuristic
+            new_h = h(new_S)
+            new_A = [j for j in action if j != a]
+            new_PC = path_cost + cost
+            # calculate f-value of new node
+            new_f = new_h + new_PC
+            new_node = (new_f, new_id, new_S, new_A, new_PC)
+            # add new node to priority queue
+            heapq.heappush(F,new_node)
+    # perform greedy nearest neighbour on best partial tour
+    current_city = state[-1]
+    counter = 0
+    cities = [i for i in range(num_cities) if i not in state]
+    num_left = len(cities)
+    while counter < num_left:
+        minimum = float('inf')
+        for city in cities:
+            value = distance_matrix[current_city][city]
+            if value < minimum:
+                minimum = value
+                current_city = city
+        counter += 1
+        state.append(current_city)
+        cities = [i for i in range(num_cities) if i not in state]
+    # perform 2-opts on tour
+    for i in range(19):
+        state, _ = twoOpt(state)
+    state, cost = twoOpt(state)
+    return state, cost
+    
+    
 
 tour, tour_length = alg1()
+
+
+
+
+
+
 
 #######################################################################################################
 ############ the code for your algorithm should now be complete and you should have        ############
@@ -383,8 +445,6 @@ if flag == "good":
     print("I have successfully written the tour to the output file " + output_file_name + ".")
     
     
-
-
 
 
 

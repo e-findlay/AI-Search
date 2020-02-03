@@ -112,7 +112,7 @@ def make_distance_matrix_symmetric(num_cities):
 ############ supplied internally as the default file or via a command line execution.      ############
 ############ if your input file does not exist then the program will crash.                ############
 
-input_file = "AISearchfile535.txt"
+input_file = "AISearchfile042.txt"
 
 #######################################################################################################
 
@@ -211,14 +211,25 @@ codes_and_names = {'BF' : 'brute-force search',
 ############    now the code for your algorithm should begin                               ############
 #######################################################################################################
 
+
 def mutate(Z):
-    # return tour with position of 2 cities swapped
+    # swaps two cities in tour
     i = len(Z)
     idx_1 = random.randint(0, i-1)
     idx_2 = random.randint(0, i-1)
     Z[idx_1], Z[idx_2] = Z[idx_2], Z[idx_1]
     return Z
 
+def mutate1(Z):
+    # swaps two cities in tour
+    i = len(Z)
+    idx_1 = random.randint(0, i-1)
+    idx_2 = random.randint(0, i-1)
+    idx_3 = random.randint(0, i-1)
+    idx_4 = random.randint(0, i-1)
+    Z[idx_1], Z[idx_2] = Z[idx_2], Z[idx_1]
+    Z[idx_3], Z[idx_4] = Z[idx_4], Z[idx_3]
+    return Z
 
 def f(X):
     if X == [0]:
@@ -235,15 +246,70 @@ def f(X):
     cost += distance_matrix[X[-1]][X[0]]
     return cost
 
+def iterativeTwoOpt(X):
+    # iteratively applies 2-opt on tour until a local minimum is reached
+    individual = X
+    local_minimum = True
+    while local_minimum:
+        local_minimum = False
+        for i in range(1, num_cities - 2):
+            for j in range(i+1, num_cities):
+                permuted_individual = X[:]
+                permuted_individual[i:j] = X[j-1:i-1:-1]
+                if f(permuted_individual) < f(individual):
+                    individual = permuted_individual
+                    local_minimum = True
+        if X == individual:
+            break
+        X = individual
+    return individual
 
+def twoOpt(X):
+    # applies single 2-opt on tour
+    individual = X
+    for i in range(1, num_cities - 2):
+        for j in range(i+1, num_cities):
+            permuted_individual = X[:]
+            permuted_individual[i:j] = X[j-1:i-1:-1]
+            if f(permuted_individual) < f(individual):
+                individual = permuted_individual
+    return individual
+                
 
+def edgeRecombinationCrossover(X,Y):
+    edges = {}
+    child = []
+    parents = [X,Y]
+    for i in range(num_cities):
+        idx1 = X.index(i)
+        idx2 = Y.index(i)
+        edges[i] = {X[(idx1+1)%num_cities], X[idx1-1], Y[(idx2+1)%num_cities], Y[idx2-1]}
+    choice = random.randint(0,1)
+    current = parents[choice][0]
+    while len(child) < num_cities-1:
+        child.append(current)
+        for v in edges.values():
+            if current in v:
+                v.remove(current)
+        if len(edges[current]) == 0:
+            chosen = random.randint(0,num_cities-1)
+            while chosen in child:
+                chosen = random.randint(0,num_cities-1)
+            current = chosen
+
+        else:
+            minimum = float('inf')
+            chosen = 0
+            for city in edges[current]:
+                if len(edges[city]) < minimum:
+                    minimum = len(edges[city])
+                    chosen = city
+            current = chosen
+    child.append(current)
+    return child
 
 
 def order1Crossover(X,Y):
-    '''
-    args: X, Y 2 selected individuals from the population
-    return value: child from crossover of X and Y
-    '''
     child = [-1]*num_cities
     indices = sorted(random.sample([i for i in range(num_cities)],2))
     child[indices[0]:indices[1]] = X[indices[0]:indices[1]]
@@ -279,7 +345,41 @@ def choose(P):
         selected += v
         if selected > choice:
             return P[k]
-    
+
+def chooseWorst(P):
+    # roulette wheel most likely to select the worst tour
+    choices = {}
+    index = 0
+    selected = 0
+    for i in P:
+        choices[index] = f(i)
+        index += 1
+    maximum = sum(choices.values())
+    choice = random.uniform(0, maximum)
+    for k, v in choices.items():
+        selected += v
+        if selected > choice:
+            return P[k]
+        
+def genPopulation(size):
+    # generate population using nearest neighbour greedy then apply 2-opt
+    P = []
+    for i in range(size):
+        next_city = random.randint(0, num_cities-1)
+        cities = [i for i in range(num_cities) if i != next_city]
+        individual = [next_city]
+        while len(individual) < num_cities:
+            minimum = float("inf")
+            for city in cities:
+                if distance_matrix[individual[-1]][city] < minimum:
+                    minimum = distance_matrix[individual[-1]][city]
+                    next_city = city
+            individual += [next_city]
+            cities.remove(next_city)
+        P.append(twoOpt(individual))
+    return P
+
+                
         
 def alg1(size=15, iterations=10, probability=0.1):
     '''
@@ -287,44 +387,37 @@ def alg1(size=15, iterations=10, probability=0.1):
         size: the size of the population generated
         iterations: the number of iterations the algorithm runs for
         probability: an integer defining the probability of a mutation occurring where
-        probability = chance of mutation
+        probability = chance of performing mutation
 
     return values:
         tour: the tour of all cities with the minimum cost found
         minimum: the total cost of the best tour found
     '''
-    P = []
-    # generate population randomly
-    for i in range(0, size):
-        cities = [i for i in range(num_cities)]
-        population = []
-        while len(population) < num_cities:
-            idx = random.randint(0, len(cities)-1)
-            population.append(cities[idx])
-            cities.pop(idx)
-        P.append(population)
+    P = genPopulation(size)
     for i in range(iterations):
-        newP = []
         for i in range(0, len(P)):
-            # select two members of popultaion
+            # select 2 individuals from population
             X = choose(P)
             Y = choose(P)
             # perform crossover
-            Z = order1Crossover(X,Y)
+            Z = twoOpt(edgeRecombinationCrossover(X,Y))
             choice = random.uniform(0,1)
             # perform mutation with probability 0.1
             if choice <= probability:
                 Z = mutate(Z)
-            # add individual to a new population
-            newP.append(Z)
-        P = newP
+            # replace member of population with new individual by being most likely to select the worst tour
+            selected = chooseWorst(P)
+            idx = P.index(selected)
+            P[idx] = Z
     costs = []
-    # select minimum tour cost from resulting population
     for p in P:
         costs.append(f(p))
+    # select tour with minimum cost
     minimum = min(costs)
     tour = P[costs.index(minimum)]
-    return tour, minimum
+    # iteratively apply 2-opt to get to local minimum
+    tour = iterativeTwoOpt(tour)
+    return tour, f(tour)
 
 
             
@@ -395,5 +488,6 @@ if flag == "good":
 
 
     
+
 
 

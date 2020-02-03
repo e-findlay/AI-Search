@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import random
+import heapq
 
 def read_file_into_string(input_file, from_ord, to_ord):
     # take a file "input_file", read it character by character, strip away all unwanted
@@ -111,17 +112,17 @@ def make_distance_matrix_symmetric(num_cities):
 ############ supplied internally as the default file or via a command line execution.      ############
 ############ if your input file does not exist then the program will crash.                ############
 
-input_file = "AISearchfile012.txt"
+input_file = "AISearchfile090.txt"
 
 #######################################################################################################
 
 # you need to worry about the code below until I tell you; that is, do not touch it!
 
 if len(sys.argv) == 1:
-    file_string = read_file_into_string("./city-files/" + input_file,44,122)
+    file_string = read_file_into_string("../city-files/" + input_file,44,122)
 else:
     input_file = sys.argv[1]
-    file_string = read_file_into_string("./city-files/" + input_file,44,122)
+    file_string = read_file_into_string("../city-files/" + input_file,44,122)
 file_string = file_string + ","         # we need to add a final comma to find the city distances
                                         # as we look for numbers between commas
 print("I'm working with the file " + input_file + ".")
@@ -209,84 +210,75 @@ codes_and_names = {'BF' : 'brute-force search',
 #######################################################################################################
 ############    now the code for your algorithm should begin                               ############
 #######################################################################################################
-print(distance_matrix)
         
-class PriorityQueue:
-    def __init__(self):
-        self.queue = []
-        
-    def isEmpty(self):
-        return self.queue == []
-    
-    def enqueue(self, data):
-        self.queue.append(data)
-    
-    def dequeue(self):
-        index = 0
-        minimum = self.queue[0][-1]
-        for i in range(len(self.queue)):
-            if self.queue[i][-1] < minimum:
-                index = i
-                minimum = self.queue[i][-1]
-        data = self.queue.pop(index)
-        return data
-
-def register_node(new_id, state, parent_id, action, path_cost, depth, f_value):
-    return (new_id, state, parent_id, action, path_cost, depth, f_value)
-
-def step_cost(state):
-    transition = state[-1]
-    if len(state) == num_cities:
-        cost = distance_matrix[state[-2]][transition] + distance_matrix[transition][state[0]]
-
-    else:
-        cost = distance_matrix[state[-2]][transition]
-    return cost
 
 
-def h(z):
+
+
+
+
+def h(z,k):
+    # if tour complete return 0
     if len(z) == num_cities:
         return 0
     else:
-        lst = []
-        for i in range(num_cities):
-            if i not in z:
-                x = z[-1]
-                lst.append(distance_matrix[x][i])
-        return min(lst)
+        # calculate cost of 'greedy' tour of length k
+        cost = 0
+        a = z[-1]
+        # copy tour
+        temp = z[:]
+        for i in range(k):
+            for i in range(num_cities):
+                # find first city not in tour copy
+                if i not in temp:
+                    # add cost of new city to cost
+                    cost += distance_matrix[a][i]
+                    a = i
+                    # append new city to tour copy
+                    temp += [a]
+        cost += distance_matrix[a][0]
+        return cost
+
+
 
 def alg1():
-    new_id = 1
-    S, P, PC, D  = [0], None, 0, 0
+    # assign initial state, path cost, actions and f-value
+    S, PC  = [0], 0
     A = [i for i in range(1, num_cities)]
-    F = 1000
-    root = register_node(new_id, S, P, A, PC, D, F)
-    F = PriorityQueue()
-    F.enqueue(root)
-    while F.isEmpty() == False:
-        (current_id, state, parent_id, action, path_cost, depth, f) = F.dequeue()
+    F_value = float('inf')
+    # create priority queue
+    F = []
+    # push root onto priority queue
+    heapq.heappush(F, (F_value, S, A, PC))
+    # check queue is not empty
+    while F != []:
+        # pop state with smallest f-value from queue
+        (f, state, action, path_cost) = heapq.heappop(F)
+        # if goal state with smallest f-value then return
+        if path_cost == f:
+            return state, path_cost
+        # explore each action
         for a in action:
-            new_id = new_id + 1
+            # append action to state to create new state
             new_S = state + [a]
-            cost = step_cost(new_S)
-            new_P = current_id
-            new_A = [j for j in action if j != a]
-            new_PC = path_cost + cost
-            new_D = depth + 1
-            new_h = h(new_S)
-            new_f = new_h + new_PC
-            new_node = register_node(new_id, new_S, new_P, new_A, new_PC, new_D, new_f)
-            if new_h == 0:
-                for i in F.queue:
-                    if i[-1] < new_f:
-                        F.enqueue(new_node)
-                        break
-                return new_S + [0], new_PC
+            # if complete tour find distance to new city and back to start
+            if len(new_S) == num_cities:
+                cost = distance_matrix[new_S[-2]][a] + distance_matrix[a][new_S[0]]
             else:
-                F.enqueue(new_node)
+                # find distance from last city to new city
+                cost = distance_matrix[new_S[-2]][a]
+            # remove current action from next actions
+            new_A = [j for j in action if j != a]
+            # add distance to path cost
+            new_PC = path_cost + cost
+            # calculate heuristic - greedy tour of length = num_cities
+            new_h = h(new_S,num_cities)
+            # add heuristic to path cost to calculate f-value
+            new_f = new_h + new_PC
+            # push new node to priority queue
+            heapq.heappush(F, (new_f, new_S, new_A, new_PC))
 tour, tour_length = alg1()
-print(tour_length)
-print(tour)
+
 
 
 
@@ -344,17 +336,3 @@ if flag == "good":
     print("I have successfully written the tour to the output file " + output_file_name + ".")
     
     
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
